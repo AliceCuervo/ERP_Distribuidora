@@ -1,242 +1,124 @@
-
 import streamlit as st
 
-from dados import (
-    produtos,
-    pedidos,
-    fila_prioridade,
-    historico,
-    categorias
-)
+from dados import produtos, pedidos, fila_prioridade, historico, categorias
+import sistema as s
 
-from sistema import (
-    cadastrar_produto,
-    cadastrar_pedido,
-    processar_pedido,
-    desfazer_ultima_acao,
-    ordenar_produtos_por_nome,
-    filtrar_por_categoria,
-    exibir_fila_prioridade
-)
+ss = st.session_state
+ROT = {1: "Alta", 2: "Média", 3: "Baixa"}
 
 
 # ==========================================
-# CALLBACKS DOS FORMULÁRIOS
+# CALLBACKS
 # ==========================================
 
-def enviar_cadastro_produto():
-
-    resultado, mensagem = cadastrar_produto(
-        st.session_state.get("produto_codigo"),
-        st.session_state.get("produto_nome"),
-        st.session_state.get("produto_categoria"),
-        st.session_state.get("produto_preco"),
-        st.session_state.get("produto_estoque")
-    )
-
-    st.session_state["feedback_produto"] = (
-        resultado,
-        mensagem
-    )
-
-    if resultado:
-        st.session_state["produto_codigo"] = None
-        st.session_state["produto_nome"] = ""
-        st.session_state["produto_categoria"] = None
-        st.session_state["produto_preco"] = None
-        st.session_state["produto_estoque"] = None
+def _fb(res):
+    ss["fb"] = res
 
 
-def enviar_cadastro_pedido():
-
-    resultado, mensagem = cadastrar_pedido(
-        st.session_state.get("pedido_numero"),
-        st.session_state.get("pedido_cliente"),
-        st.session_state.get("pedido_codigo_produto"),
-        st.session_state.get("pedido_quantidade"),
-        st.session_state.get("pedido_prioridade")
-    )
-
-    st.session_state["feedback_pedido"] = (
-        resultado,
-        mensagem
-    )
-
-    if resultado:
-        st.session_state["pedido_numero"] = None
-        st.session_state["pedido_cliente"] = ""
-        st.session_state["pedido_codigo_produto"] = None
-        st.session_state["pedido_quantidade"] = None
-        st.session_state["pedido_prioridade"] = 1
+def cb_cad_produto():
+    res = s.cadastrar_produto(ss.get("cp_codigo"), ss.get("cp_nome"),
+                              ss.get("cp_cat"), ss.get("cp_preco"), ss.get("cp_estoque"))
+    _fb(res)
+    if res[0]:
+        ss["cp_codigo"] = None; ss["cp_nome"] = ""; ss["cp_cat"] = None
+        ss["cp_preco"] = None; ss["cp_estoque"] = None
 
 
-def processar_proximo_pedido():
-
-    resultado, mensagem = processar_pedido()
-
-    st.session_state["feedback_fila"] = (
-        resultado,
-        mensagem
-    )
+def cb_alt_produto():
+    c = ss.get("ap_sel")
+    _fb(s.alterar_produto(c, ss.get(f"ap_nome_{c}"), ss.get(f"ap_cat_{c}"),
+                          ss.get(f"ap_preco_{c}"), ss.get(f"ap_estoque_{c}")))
 
 
-def desfazer_operacao():
+def cb_rem_produto():
+    _fb(s.remover_produto(ss.get("ap_sel")))
 
-    resultado, mensagem = desfazer_ultima_acao()
 
-    st.session_state["feedback_desfazer"] = (
-        resultado,
-        mensagem
-    )
+def cb_cad_pedido():
+    res = s.cadastrar_pedido(ss.get("pd_numero"), ss.get("pd_cliente"),
+                             ss.get("pd_produto"), ss.get("pd_qtd"),
+                             ss.get("pd_prio"), ss.get("pd_prazo"))
+    _fb(res)
+    if res[0]:
+        ss["pd_numero"] = None; ss["pd_cliente"] = ""; ss["pd_produto"] = None
+        ss["pd_qtd"] = None; ss["pd_prio"] = 1; ss["pd_prazo"] = 7
+
+
+def cb_alt_pedido():
+    n = ss.get("ep_sel")
+    _fb(s.alterar_pedido(n, ss.get(f"ep_cli_{n}"), ss.get(f"ep_prod_{n}"),
+                         ss.get(f"ep_qtd_{n}"), ss.get(f"ep_prio_{n}"),
+                         ss.get(f"ep_prazo_{n}")))
+
+
+def cb_rem_pedido():
+    _fb(s.remover_pedido(ss.get("ep_sel")))
+
+
+def cb_processar():
+    _fb(s.processar_pedido())
+
+
+def cb_desfazer():
+    _fb(s.desfazer_ultima_acao())
+
+
+def mostrar_fb():
+    fb = ss.pop("fb", None)
+    if fb:
+        (st.success if fb[0] else st.error)(fb[1])
 
 
 # ==========================================
-# CONFIGURAÇÕES
+# LINHAS DE TABELA
 # ==========================================
 
-st.set_page_config(
-    page_title="ERP Distribuidora",
-    layout="wide"
-)
+def linhas_produtos(lista):
+    return [{"Código": p["codigo"], "Nome": p["nome"], "Categoria": p["categoria"],
+             "Preço": p["preco"], "Estoque": p["estoque"],
+             "Reservado": p["reservado"], "Disponível": p["estoque"] - p["reservado"]}
+            for p in lista]
+
+
+def linhas_pedidos(lista):
+    return [{"Número": p["numero"], "Cliente": p["cliente"], "Produto": p["produto"],
+             "Quantidade": p["quantidade"], "Prioridade": ROT[p["prioridade"]],
+             "Prazo (dias)": p["prazo"], "Valor": p["valor"], "Status": p["status"]}
+            for p in lista]
 
 
 # ==========================================
-# IDENTIDADE VISUAL
+# PÁGINA / ESTILO
 # ==========================================
+
+st.set_page_config(page_title="ERP Distribuidora", layout="wide")
 
 st.markdown("""
 <style>
-
-    /* Fundo principal */
-    .stApp {
-        background-color: #F7F9FC;
-        color: #263445;
-    }
-
-    /* Menu lateral */
-    [data-testid="stSidebar"] {
-        background-color: #FFFFFF;
-        border-right: 1px solid #E5EAF0;
-    }
-
-    /* Títulos */
-    h1, h2, h3 {
-        color: #24364B;
-        font-weight: 600;
-    }
-
-    /* Navegação lateral */
-    [data-testid="stSidebar"] [data-testid="stRadio"] label {
-        padding: 10px 12px;
-        border-radius: 7px;
-        margin-bottom: 4px;
-        transition: background-color 0.2s ease;
-    }
-
-    /* Esconder círculos de seleção */
-    [data-testid="stSidebar"] [data-testid="stRadio"] label > div:first-child {
-        display: none;
-    }
-
-    /* Opção selecionada */
-    [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
-        background-color: #EAF1F8;
-        color: #24558A;
-        font-weight: 600;
-    }
-
-    /* Efeito ao passar o mouse */
-    [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
-        background-color: #F0F4F8;
-    }
-
-    /* Indicadores do painel */
-    [data-testid="stMetric"] {
-        background-color: #FFFFFF;
-        border: 1px solid #E5EAF0;
-        padding: 22px;
-        border-radius: 10px;
-        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-    }
-
-    /* Títulos dos indicadores */
-    [data-testid="stMetricLabel"] {
-        color: #64748B;
-        font-size: 14px;
-        font-weight: 500;
-    }
-
-    /* Valores dos indicadores */
-    [data-testid="stMetricValue"] {
-        color: #1E293B;
-        font-size: 30px;
-        font-weight: 600;
-    }
-
-    /* Botões */
-    div.stButton > button,
-    div.stFormSubmitButton > button {
-        background-color: #3267A8;
-        color: #FFFFFF;
-        border: none;
-        border-radius: 7px;
-        font-weight: 600;
-        padding: 8px 18px;
-    }
-
-    div.stButton > button:hover,
-    div.stFormSubmitButton > button:hover {
-        background-color: #244F85;
-        color: #FFFFFF;
-        border: none;
-    }
-
-    /* Tabelas */
-    [data-testid="stDataFrame"] {
-        border: 1px solid #E5EAF0;
-        border-radius: 8px;
-        overflow: hidden;
-    }
-
+.stApp { background-color: #F7F9FC; color: #263445; }
+[data-testid="stSidebar"] { background-color: #FFFFFF; border-right: 1px solid #E5EAF0; }
+h1, h2, h3 { color: #24364B; font-weight: 600; }
+[data-testid="stSidebar"] [data-testid="stRadio"] label { padding: 10px 12px; border-radius: 7px; margin-bottom: 4px; }
+[data-testid="stSidebar"] [data-testid="stRadio"] label > div:first-child { display: none; }
+[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) { background-color: #EAF1F8; color: #24558A; font-weight: 600; }
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover { background-color: #F0F4F8; }
+[data-testid="stMetric"] { background-color: #FFFFFF; border: 1px solid #E5EAF0; padding: 22px; border-radius: 10px; }
+[data-testid="stMetricLabel"] { color: #64748B; font-size: 14px; }
+[data-testid="stMetricValue"] { color: #1E293B; font-size: 30px; font-weight: 600; }
+div.stButton > button, div.stFormSubmitButton > button { background-color: #3267A8; color: #FFFFFF; border: none; border-radius: 7px; font-weight: 600; padding: 8px 18px; }
+div.stButton > button:hover, div.stFormSubmitButton > button:hover { background-color: #244F85; color: #FFFFFF; }
+[data-testid="stDataFrame"] { border: 1px solid #E5EAF0; border-radius: 8px; overflow: hidden; }
 </style>
 """, unsafe_allow_html=True)
 
-
-# ==========================================
-# CABEÇALHO
-# ==========================================
-
 st.title("ERP Distribuidora")
-
-st.caption(
-    "Sistema de gestão de produtos, estoque e pedidos"
-)
-
+st.caption("Sistema de gestão de produtos, estoque e pedidos")
 st.sidebar.title("Distribuidora")
-
-st.sidebar.caption(
-    "Gestão de produtos e pedidos"
-)
-
+st.sidebar.caption("Gestão de produtos e pedidos")
 st.sidebar.divider()
 
-
-# ==========================================
-# MENU PRINCIPAL
-# ==========================================
-
-aba = st.sidebar.radio(
-    "Menu principal",
-    [
-        "Início",
-        "Cadastrar produto",
-        "Cadastrar pedido",
-        "Produtos cadastrados",
-        "Pedidos cadastrados",
-        "Fila de prioridade",
-        "Histórico e desfazer"
-    ]
-)
+aba = st.sidebar.radio("Menu principal", [
+    "Início", "Produtos", "Pedidos", "Fila de prioridade", "Histórico e desfazer"])
 
 
 # ==========================================
@@ -244,327 +126,190 @@ aba = st.sidebar.radio(
 # ==========================================
 
 if aba == "Início":
-
     st.subheader("Visão geral")
-
-    st.caption(
-        "Acompanhe os principais dados da distribuidora."
-    )
-
-    st.divider()
-
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric(
-        label="Produtos cadastrados",
-        value=len(produtos)
-    )
-
-    col2.metric(
-        label="Pedidos registrados",
-        value=len(pedidos)
-    )
-
-    col3.metric(
-        label="Pedidos na fila",
-        value=len(fila_prioridade)
-    )
-
-    st.divider()
-
-    st.caption(
-        "Utilize o menu lateral para acessar as funções do sistema."
-    )
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Produtos cadastrados", len(produtos))
+    c2.metric("Pedidos registrados", len(pedidos))
+    c3.metric("Pedidos na fila", len(fila_prioridade))
+    st.caption("Utilize o menu lateral para acessar as funções do sistema.")
 
 
 # ==========================================
-# CADASTRAR PRODUTO
+# PRODUTOS
 # ==========================================
 
-elif aba == "Cadastrar produto":
+elif aba == "Produtos":
+    mostrar_fb()
+    t1, t2, t3 = st.tabs(["Consultar / listar", "Cadastrar", "Alterar / remover"])
 
-    with st.container(border=True):
+    with t2:
+        with st.container(border=True):
+            st.subheader("Novo produto")
+            with st.form("form_produto"):
+                st.number_input("Código do produto", min_value=1, value=None, step=1,
+                                placeholder="Digite o código", key="cp_codigo")
+                st.text_input("Nome do produto", placeholder="Digite o nome", key="cp_nome")
+                st.selectbox("Categoria", options=categorias, index=None,
+                             placeholder="Selecione ou digite uma categoria",
+                             accept_new_options=True, key="cp_cat")
+                st.number_input("Preço", min_value=0.01, value=None, step=0.01,
+                                placeholder="Digite o preço", key="cp_preco")
+                st.number_input("Quantidade em estoque", min_value=0, value=None, step=1,
+                                placeholder="Digite a quantidade", key="cp_estoque")
+                st.form_submit_button("Cadastrar produto", width="stretch",
+                                      on_click=cb_cad_produto)
 
-        st.subheader("Novo produto")
-
-        st.caption(
-            "Informe os dados do produto para adicioná-lo ao estoque."
-        )
-
-        st.divider()
-
-        with st.form("form_produto"):
-
-            codigo = st.number_input(
-                "Código do produto",
-                min_value=1,
-                value=None,
-                step=1,
-                placeholder="Digite o código",
-                key="produto_codigo"
-            )
-
-            nome = st.text_input(
-                "Nome do produto",
-                placeholder="Digite o nome do produto",
-                key="produto_nome"
-            )
-
-            categoria = st.selectbox(
-                "Categoria",
-                options=categorias,
-                index=None,
-                placeholder="Selecione ou digite uma categoria",
-                accept_new_options=True,
-                key="produto_categoria"
-            )
-
-            preco = st.number_input(
-                "Preço",
-                min_value=0.01,
-                value=None,
-                step=0.01,
-                placeholder="Digite o preço",
-                key="produto_preco"
-            )
-
-            estoque = st.number_input(
-                "Quantidade em estoque",
-                min_value=0,
-                value=None,
-                step=1,
-                placeholder="Digite a quantidade",
-                key="produto_estoque"
-            )
-
-            st.form_submit_button(
-                "Cadastrar produto",
-                width="stretch",
-                on_click=enviar_cadastro_produto
-            )
-
-    feedback = st.session_state.pop(
-        "feedback_produto",
-        None
-    )
-
-    if feedback is not None:
-
-        resultado, mensagem = feedback
-
-        if resultado:
-            st.success(mensagem)
-        else:
-            st.error(mensagem)
-
-
-# ==========================================
-# CADASTRAR PEDIDO
-# ==========================================
-
-elif aba == "Cadastrar pedido":
-
-    with st.container(border=True):
-
-        st.subheader("Novo pedido")
-
-        st.caption(
-            "Informe os dados do cliente e do pedido para registrá-lo no sistema."
-        )
-
-        st.divider()
-
+    with t1:
         if not produtos:
-
-            st.warning(
-                "Cadastre pelo menos um produto antes de criar pedidos."
-            )
-
+            st.warning("Nenhum produto cadastrado.")
         else:
+            st.markdown("#### Consulta")
+            q1, q2 = st.columns(2)
+            cod = q1.number_input("Buscar por código", min_value=1, value=None, step=1,
+                                  placeholder="Código", key="bc_cod")
+            nome = q2.text_input("Buscar por nome", placeholder="Parte do nome", key="bc_nome")
+            if cod is not None:
+                achado = s.buscar_produto(cod)
+                if achado:
+                    st.dataframe(linhas_produtos([achado]), width="stretch", hide_index=True)
+                else:
+                    st.info("Produto não encontrado.")
+            if nome.strip():
+                achados = s.buscar_produtos_por_nome(nome)
+                if achados:
+                    st.dataframe(linhas_produtos(achados), width="stretch", hide_index=True)
+                else:
+                    st.info("Nenhum produto com esse nome.")
 
-            with st.form("form_pedido"):
+            st.divider()
+            st.markdown("#### Listagem")
+            cats = ["Todas"]
+            for p in produtos:
+                if p["categoria"] not in cats:
+                    cats.append(p["categoria"])
+            f1, f2, f3 = st.columns(3)
+            cat = f1.selectbox("Filtrar por categoria", cats)
+            campo = f2.selectbox("Ordenar por", ["nome", "preco", "estoque", "codigo"],
+                                 format_func=lambda x: {"nome": "Nome", "preco": "Preço",
+                                                        "estoque": "Estoque", "codigo": "Código"}[x])
+            rev = f3.checkbox("Ordem decrescente")
+            ordenados = s.ordenar_produtos(campo, rev)
+            if cat != "Todas":
+                filtrados = []
+                for p in ordenados:
+                    if p["categoria"] == cat:
+                        filtrados.append(p)
+                ordenados = filtrados
+            st.write(f"Total de produtos encontrados: {len(ordenados)}")
+            st.dataframe(linhas_produtos(ordenados), width="stretch", hide_index=True)
 
-                numero = st.number_input(
-                    "Número do pedido",
-                    min_value=1,
-                    value=None,
-                    step=1,
-                    placeholder="Digite o número do pedido",
-                    key="pedido_numero"
-                )
-
-                cliente = st.text_input(
-                    "Nome do cliente",
-                    placeholder="Digite o nome do cliente",
-                    key="pedido_cliente"
-                )
-
-                codigo_produto = st.number_input(
-                    "Código do produto",
-                    min_value=1,
-                    value=None,
-                    step=1,
-                    placeholder="Digite o código do produto",
-                    key="pedido_codigo_produto"
-                )
-
-                quantidade = st.number_input(
-                    "Quantidade solicitada",
-                    min_value=1,
-                    value=None,
-                    step=1,
-                    placeholder="Digite a quantidade",
-                    key="pedido_quantidade"
-                )
-
-                prioridade = st.selectbox(
-                    "Prioridade",
-                    [1, 2, 3],
-                    format_func=lambda x: {
-                        1: "Alta",
-                        2: "Média",
-                        3: "Baixa"
-                    }[x],
-                    key="pedido_prioridade"
-                )
-
-                st.form_submit_button(
-                    "Cadastrar pedido",
-                    width="stretch",
-                    on_click=enviar_cadastro_pedido
-                )
-
-    feedback = st.session_state.pop(
-        "feedback_pedido",
-        None
-    )
-
-    if feedback is not None:
-
-        resultado, mensagem = feedback
-
-        if resultado:
-            st.success(mensagem)
+    with t3:
+        if not produtos:
+            st.info("Nenhum produto cadastrado.")
         else:
-            st.error(mensagem)
+            cods = [p["codigo"] for p in s.ordenar_produtos("codigo")]
+            c = st.selectbox("Produto", cods, key="ap_sel",
+                             format_func=lambda x: f"{x} - {s.buscar_produto(x)['nome']}")
+            p = s.buscar_produto(c)
+            if p:
+                with st.container(border=True):
+                    st.text_input("Nome", value=p["nome"], key=f"ap_nome_{c}")
+                    idx = categorias.index(p["categoria"]) if p["categoria"] in categorias else None
+                    st.selectbox("Categoria", options=categorias, index=idx,
+                                 accept_new_options=True, key=f"ap_cat_{c}")
+                    st.number_input("Preço", min_value=0.01, value=float(p["preco"]),
+                                    step=0.01, key=f"ap_preco_{c}")
+                    st.number_input("Estoque", min_value=0, value=int(p["estoque"]),
+                                    step=1, key=f"ap_estoque_{c}")
+                    b1, b2 = st.columns(2)
+                    b1.button("Salvar alterações", width="stretch", on_click=cb_alt_produto)
+                    b2.button("Remover produto", width="stretch", on_click=cb_rem_produto)
 
 
 # ==========================================
-# PRODUTOS CADASTRADOS
+# PEDIDOS
 # ==========================================
 
-elif aba == "Produtos cadastrados":
+elif aba == "Pedidos":
+    mostrar_fb()
+    t1, t2, t3 = st.tabs(["Consultar / listar", "Cadastrar", "Alterar / remover"])
 
-    st.subheader("Produtos cadastrados")
+    with t2:
+        with st.container(border=True):
+            st.subheader("Novo pedido")
+            if not produtos:
+                st.warning("Cadastre pelo menos um produto antes de criar pedidos.")
+            else:
+                with st.form("form_pedido"):
+                    st.number_input("Número do pedido", min_value=1, value=None, step=1,
+                                    placeholder="Número", key="pd_numero")
+                    st.text_input("Nome do cliente", placeholder="Cliente", key="pd_cliente")
+                    st.number_input("Código do produto", min_value=1, value=None, step=1,
+                                    placeholder="Código do produto", key="pd_produto")
+                    st.number_input("Quantidade solicitada", min_value=1, value=None, step=1,
+                                    placeholder="Quantidade", key="pd_qtd")
+                    st.selectbox("Prioridade", [1, 2, 3], format_func=lambda x: ROT[x],
+                                 key="pd_prio")
+                    st.number_input("Prazo de entrega (dias)", min_value=1, value=7, step=1,
+                                    key="pd_prazo")
+                    st.form_submit_button("Cadastrar pedido", width="stretch",
+                                          on_click=cb_cad_pedido)
 
-    if produtos:
-
-        categorias_produtos = []
-
-        for produto in produtos:
-
-            categoria = produto["categoria"]
-
-            if categoria not in categorias_produtos:
-                categorias_produtos.append(categoria)
-
-        categorias_produtos.insert(0, "Todas")
-
-        categoria_selecionada = st.selectbox(
-            "Filtrar por categoria",
-            categorias_produtos
-        )
-
-        if categoria_selecionada == "Todas":
-
-            produtos_filtrados = produtos
-
+    with t1:
+        if not pedidos:
+            st.info("Nenhum pedido cadastrado.")
         else:
+            st.markdown("#### Consulta")
+            num = st.number_input("Buscar por número do pedido", min_value=1, value=None,
+                                  step=1, placeholder="Número", key="bp_num")
+            if num is not None:
+                achado = s.buscar_pedido(num)
+                if achado:
+                    st.dataframe(linhas_pedidos([achado]), width="stretch", hide_index=True)
+                else:
+                    st.info("Pedido não encontrado.")
 
-            produtos_filtrados = filtrar_por_categoria(
-                categoria_selecionada
-            )
+            st.divider()
+            st.markdown("#### Listagem")
+            f1, f2, f3 = st.columns(3)
+            status = f1.selectbox("Filtrar por status", ["Todos", "Pendente", "Processado"])
+            campo = f2.selectbox("Ordenar por", ["numero", "valor", "prazo", "quantidade"],
+                                 format_func=lambda x: {"numero": "Número", "valor": "Valor",
+                                                        "prazo": "Prazo", "quantidade": "Quantidade"}[x])
+            rev = f3.checkbox("Ordem decrescente")
+            base = pedidos if status == "Todos" else s.filtrar_pedidos_por_status(status)
+            lista = s.ordenar_pedidos(campo, rev, base)
+            st.write(f"Total de pedidos: {len(lista)}")
+            st.dataframe(linhas_pedidos(lista), width="stretch", hide_index=True)
 
-        st.write(
-            f"Total de produtos encontrados: {len(produtos_filtrados)}"
-        )
-
-        if categoria_selecionada == "Todas":
-
-            for categoria in categorias_produtos[1:]:
-
-                st.markdown(f"### {categoria}")
-
-                produtos_categoria = filtrar_por_categoria(
-                    categoria
-                )
-
-                st.dataframe(
-                    produtos_categoria,
-                    width="stretch"
-                )
-
+    with t3:
+        if not pedidos:
+            st.info("Nenhum pedido cadastrado.")
         else:
-
-            st.dataframe(
-                produtos_filtrados,
-                width="stretch"
-            )
-
-        st.divider()
-
-        st.subheader("Relatório geral ordenado por nome")
-
-        produtos_ordenados = ordenar_produtos_por_nome()
-
-        st.dataframe(
-            produtos_ordenados,
-            width="stretch"
-        )
-
-    else:
-
-        st.warning("Nenhum produto cadastrado.")
-
-
-# ==========================================
-# PEDIDOS CADASTRADOS
-# ==========================================
-
-elif aba == "Pedidos cadastrados":
-
-    st.subheader("Pedidos cadastrados")
-
-    if pedidos:
-
-        pedidos_exibicao = []
-
-        for pedido in pedidos:
-
-            pedidos_exibicao.append({
-                "Número do pedido": pedido["numero"],
-                "Cliente": pedido["cliente"],
-                "Produto": pedido["produto"],
-                "Quantidade": pedido["quantidade"],
-                "Prioridade": {
-                    1: "Alta",
-                    2: "Média",
-                    3: "Baixa"
-                }[pedido["prioridade"]],
-                "Status": pedido["status"]
-            })
-
-        st.write(f"Total de pedidos: {len(pedidos)}")
-
-        st.dataframe(
-            pedidos_exibicao,
-            width="stretch",
-            hide_index=True
-        )
-
-    else:
-
-        st.info("Nenhum pedido cadastrado.")
+            nums = [p["numero"] for p in s.ordenar_pedidos("numero")]
+            n = st.selectbox("Pedido", nums, key="ep_sel",
+                             format_func=lambda x: f"{x} - {s.buscar_pedido(x)['cliente']} "
+                                                   f"({s.buscar_pedido(x)['status']})")
+            p = s.buscar_pedido(n)
+            if p:
+                with st.container(border=True):
+                    if p["status"] != "Pendente":
+                        st.caption("Pedido processado: só pode ser removido "
+                                   "(o estoque NÃO é devolvido).")
+                    else:
+                        st.text_input("Cliente", value=p["cliente"], key=f"ep_cli_{n}")
+                        st.number_input("Código do produto", min_value=1,
+                                        value=int(p["codigo_produto"]), step=1, key=f"ep_prod_{n}")
+                        st.number_input("Quantidade", min_value=1, value=int(p["quantidade"]),
+                                        step=1, key=f"ep_qtd_{n}")
+                        st.selectbox("Prioridade", [1, 2, 3], index=p["prioridade"] - 1,
+                                     format_func=lambda x: ROT[x], key=f"ep_prio_{n}")
+                        st.number_input("Prazo (dias)", min_value=1, value=int(p["prazo"]),
+                                        step=1, key=f"ep_prazo_{n}")
+                    b1, b2 = st.columns(2)
+                    if p["status"] == "Pendente":
+                        b1.button("Salvar alterações", width="stretch", on_click=cb_alt_pedido)
+                    b2.button("Remover pedido", width="stretch", on_click=cb_rem_pedido)
 
 
 # ==========================================
@@ -572,58 +317,15 @@ elif aba == "Pedidos cadastrados":
 # ==========================================
 
 elif aba == "Fila de prioridade":
-
     st.subheader("Fila de pedidos")
-
+    st.caption("Ordem: prioridade, depois menor prazo, depois chegada.")
     if fila_prioridade:
-
-        fila_exibicao = []
-
-        fila_ordenada = exibir_fila_prioridade()
-
-        for pedido in fila_ordenada:
-
-            fila_exibicao.append({
-                "Número do pedido": pedido["numero"],
-                "Cliente": pedido["cliente"],
-                "Produto": pedido["produto"],
-                "Quantidade": pedido["quantidade"],
-                "Prioridade": {
-                    1: "Alta",
-                    2: "Média",
-                    3: "Baixa"
-                }[pedido["prioridade"]]
-            })
-
-        st.dataframe(
-            fila_exibicao,
-            width="stretch",
-            hide_index=True
-        )
-
-        st.button(
-            "Processar próximo pedido",
-            width="stretch",
-            on_click=processar_proximo_pedido
-        )
-
+        st.dataframe(linhas_pedidos(s.exibir_fila_prioridade()),
+                     width="stretch", hide_index=True)
+        st.button("Processar próximo pedido", width="stretch", on_click=cb_processar)
     else:
-
         st.info("Não existem pedidos na fila.")
-
-    feedback = st.session_state.pop(
-        "feedback_fila",
-        None
-    )
-
-    if feedback is not None:
-
-        resultado, mensagem = feedback
-
-        if resultado:
-            st.success(mensagem)
-        else:
-            st.error(mensagem)
+    mostrar_fb()
 
 
 # ==========================================
@@ -631,36 +333,12 @@ elif aba == "Fila de prioridade":
 # ==========================================
 
 elif aba == "Histórico e desfazer":
-
     st.subheader("Histórico de operações")
-
     if historico:
-
         for item in reversed(historico):
             st.write("•", item)
-
     else:
-
         st.info("Nenhuma operação registrada.")
-
     st.divider()
-
-    st.button(
-        "Desfazer última operação",
-        width="stretch",
-        on_click=desfazer_operacao
-    )
-
-    feedback = st.session_state.pop(
-        "feedback_desfazer",
-        None
-    )
-
-    if feedback is not None:
-
-        resultado, mensagem = feedback
-
-        if resultado:
-            st.success(mensagem)
-        else:
-            st.warning(mensagem)
+    st.button("Desfazer última operação", width="stretch", on_click=cb_desfazer)
+    mostrar_fb()

@@ -1,24 +1,20 @@
-
-# ==========================================
 # ESTRUTURAS DE DADOS - ERP DISTRIBUIDORA
-# ==========================================
+# Obs.: listas em nível de módulo => todos os visitantes compartilham dados
+# e tudo some ao reiniciar o app (sem banco de dados, por escopo do trabalho).
 
-# Lista de produtos cadastrados
-produtos = []
+produtos = []            # Lista (cadastro de produtos)
+pedidos = []             # Lista (cadastro de pedidos)
+fila_prioridade = []     # Heap binário manual: (prioridade, prazo, ordem, pedido)
+historico = []           # Lista de mensagens
+pilha_desfazer = []      # Pilha de operações inversas (padrão comando)
 
-# Lista de pedidos cadastrados
-pedidos = []
+# Índices para busca O(1)
+idx_produtos = {}        # codigo -> produto
+idx_pedidos = {}         # numero -> pedido
 
-# Fila de prioridade dos pedidos
-fila_prioridade = []
+# Contador de chegada (desempate FIFO)
+contador = {"ordem": 0}
 
-# Histórico de operações
-historico = []
-
-# Pilha de estados para desfazer operações
-pilha_desfazer = []
-
-# Categorias cadastradas
 categorias = [
     "Alimentos",
     "Bebidas",
@@ -26,5 +22,5 @@ categorias = [
     "Eletrônicos",
     "Informática e periféricos",
     "Utensílios domésticos",
-    "Papelaria"
+    "Papelaria",
 ]
